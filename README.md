@@ -10,7 +10,7 @@
 - 自动处理CSRF token
 - 内置请求重试机制
 - 完善的错误处理
-- 多语言支持（Python、JavaScript、Go、Rust、PHP、Java、C#、易语言）
+- 多语言支持（Python、JavaScript、Go、Rust、PHP、Java、C#）
 
 ## 项目结构
 
@@ -59,9 +59,7 @@ xAuth/
 │   │   ├── Program.cs    # 测试程序
 │   │   └── XAuth.csproj  # 项目文件
 │   └── README.md     # C#版本说明
-└── 易语言/            # 易语言实现
-    ├── XAuth.e       # 主要实现和测试代码
-    └── README.md     # 易语言版本说明
+└──
 ```
 
 ## 使用方法
@@ -75,7 +73,6 @@ xAuth/
 - [PHP版本使用说明](php/README.md)
 - [Java版本使用说明](java/README.md)
 - [C#版本使用说明](csharp/README.md)
-- [易语言版本使用说明](易语言/README.md)
 
 ## 错误处理
 
@@ -105,7 +102,6 @@ xAuth/
 - PHP: `php/test.php`
 - Java: `java/src/main/java/com/xauth/XAuthTest.java`
 - C#: `csharp/XAuth/Program.cs`
-- 易语言: `易语言/XAuth.e` (包含测试代码)
 
 运行测试的详细说明请参考各语言文件夹中的README.md文件。
 
