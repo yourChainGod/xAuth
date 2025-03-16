@@ -1,0 +1,12 @@
+{
+  "name": "xauth",
+  "version": "1.0.0",
+  "description": "Twitter OAuth Authentication Implementation",
+  "main": "xauth.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2"
+  }
+}
