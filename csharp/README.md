@@ -1,4 +1,6 @@
-# XAuth C# .NET版本
+# [hdd.cm推特低至1毛5](https://hdd.cm/)
+
+# XAuth C#版本
 
 这是Twitter OAuth认证库的C# .NET实现版本，支持OAuth1和OAuth2认证流程。
 
@@ -9,32 +11,36 @@
 - 内置请求重试机制
 - 完善的错误处理
 - 异步API设计
-- 完整的XML文档注释
+- 完整的XML文档
 
-## 项目结构
+## 文件结构
 
-- `XAuth.cs` - 主要实现文件，包含XAuthClient类和XAuthException类
+- `XAuth.cs` - 主要实现类，包含XAuthClient类
 - `Program.cs` - 测试程序
-- `XAuth.csproj` - 项目文件
+- `XAuth.csproj` - .NET项目文件
 
 ## 系统要求
 
-- .NET 6.0或更高版本
-- 支持异步/await的C#编译器
+- .NET 6.0+
+- 支持async/await的C#编译器
 
 ## 使用方法
 
 ### 初始化
 
 ```csharp
-// 创建XAuth实例
-using var xAuth = new XAuthClient("your_auth_token");
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+// 创建XAuthClient实例
+var client = new XAuthClient("your_auth_token");
 ```
 
 ### OAuth2认证
 
 ```csharp
-// OAuth2认证
+// 设置OAuth2参数
 var parameters = new Dictionary<string, string>
 {
     { "code_challenge", "challenge" },
@@ -48,8 +54,8 @@ var parameters = new Dictionary<string, string>
 
 try
 {
-    string authCode = await xAuth.OAuth2Async(parameters);
-    Console.WriteLine($"OAuth2认证成功，认证码: {authCode}");
+    string authCode = await client.OAuth2Async(parameters);
+    Console.WriteLine($"OAuth2认证码: {authCode}");
 }
 catch (XAuthException ex)
 {
@@ -60,11 +66,10 @@ catch (XAuthException ex)
 ### OAuth1认证
 
 ```csharp
-// OAuth1认证
 try
 {
-    string oauth1Verifier = await xAuth.OAuth1Async("your_oauth_token");
-    Console.WriteLine($"OAuth1认证成功，验证码: {oauth1Verifier}");
+    string oauth1Verifier = await client.OAuth1Async("your_oauth_token");
+    Console.WriteLine($"OAuth1验证码: {oauth1Verifier}");
 }
 catch (XAuthException ex)
 {
@@ -74,52 +79,42 @@ catch (XAuthException ex)
 
 ## 错误处理
 
-库使用XAuthException类来表示认证过程中的错误。您可以捕获这些异常并处理它们，或者使用LastError属性获取最后一次错误信息。
+库使用自定义的`XAuthException`来处理错误，您可以使用try-catch来捕获这些异常：
 
 ```csharp
 try
 {
     // 执行认证操作
+    string authCode = await client.OAuth2Async(parameters);
+    Console.WriteLine($"认证成功: {authCode}");
 }
 catch (XAuthException ex)
 {
+    // 处理错误
     Console.WriteLine($"认证失败: {ex.Message}");
 }
-
-// 或者使用LastError属性
-if (string.IsNullOrEmpty(xAuth.LastError))
+catch (Exception ex)
 {
-    Console.WriteLine("操作成功");
-}
-else
-{
-    Console.WriteLine($"操作失败: {xAuth.LastError}");
+    // 处理其他异常
+    Console.WriteLine($"发生错误: {ex.Message}");
 }
 ```
 
 ## 资源管理
 
-XAuthClient类实现了IDisposable接口，因此您应该在使用完毕后释放资源：
+确保在不再需要客户端时释放资源：
 
 ```csharp
-using (var xAuth = new XAuthClient("your_auth_token"))
-{
-    // 使用xAuth
-}
-// 资源会在这里自动释放
+// 如果XAuthClient实现了IDisposable接口
+client.Dispose();
 ```
 
-或者手动调用Dispose方法：
+或者使用using语句：
 
 ```csharp
-var xAuth = new XAuthClient("your_auth_token");
-try
+using (var client = new XAuthClient("your_auth_token"))
 {
-    // 使用xAuth
-}
-finally
-{
-    xAuth.Dispose();
+    // 使用客户端...
 }
 ```
 
@@ -127,15 +122,16 @@ finally
 
 ### 使用Visual Studio
 
-1. 打开Visual Studio
-2. 打开XAuth.csproj项目文件
-3. 按F5运行项目
+1. 打开XAuth.csproj文件
+2. 按F5运行项目
 
 ### 使用命令行
 
 ```bash
-cd csharp/XAuth
+# 编译项目
 dotnet build
+
+# 运行项目
 dotnet run
 ```
 
