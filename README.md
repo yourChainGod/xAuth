@@ -1,11 +1,8 @@
 # [hdd.cm推特低至1毛5](https://hdd.cm/)
 
-
-# go和Python版本经过完整测试，js版本为AI生成，自行测试使用
-
 # Twitter OAuth认证库
 
-这是一个用于处理Twitter OAuth认证的多语言实现库，支持OAuth1和OAuth2认证流程。该库提供了Python、JavaScript、Go、Rust、PHP和Java六种实现版本，可以根据项目需求选择合适的版本。
+这是一个用于处理Twitter OAuth认证的多语言实现库，支持OAuth1和OAuth2认证流程。该库提供了Python、JavaScript、Go、Rust、PHP、Java、C#和易语言八种实现版本，可以根据项目需求选择合适的版本。
 
 ## 功能特点
 
@@ -13,7 +10,7 @@
 - 自动处理CSRF token
 - 内置请求重试机制
 - 完善的错误处理
-- 多语言支持（Python、JavaScript、Go、Rust、PHP、Java）
+- 多语言支持（Python、JavaScript、Go、Rust、PHP、Java、C#、易语言）
 
 ## 项目结构
 
@@ -22,246 +19,63 @@ xAuth/
 ├── python/           # Python实现
 │   ├── xauth.py      # 主要实现
 │   ├── test.py       # 测试代码
-│   └── requirements.txt
+│   ├── requirements.txt
+│   └── README.md     # Python版本说明
 ├── javascript/       # JavaScript实现
 │   ├── xauth.js      # 主要实现
 │   ├── test.js       # 测试代码
-│   └── package.json
+│   ├── package.json
+│   └── README.md     # JavaScript版本说明
 ├── golang/           # Go实现
 │   ├── xauth.go      # 主要实现
 │   ├── test.go       # 测试代码
 │   ├── go.mod
-│   └── go.sum
+│   ├── go.sum
+│   └── README.md     # Go版本说明
 ├── rust/             # Rust实现
 │   ├── src/
 │   │   ├── lib.rs    # 主要实现
 │   │   └── main.rs   # 测试代码
-│   └── Cargo.toml
+│   ├── Cargo.toml
+│   └── README.md     # Rust版本说明
 ├── php/              # PHP实现
 │   ├── XAuth.php     # 主要实现
-│   └── test.php      # 测试代码
-└── java/             # Java实现
-    ├── src/
-    │   └── main/
-    │       └── java/
-    │           └── com/
-    │               └── xauth/
-    │                   ├── XAuth.java         # 主要实现
-    │                   ├── XAuthException.java # 异常类
-    │                   └── XAuthTest.java     # 测试代码
-    └── pom.xml
+│   ├── test.php      # 测试代码
+│   └── README.md     # PHP版本说明
+├── java/             # Java实现
+│   ├── src/
+│   │   └── main/
+│   │       └── java/
+│   │           └── com/
+│   │               └── xauth/
+│   │                   ├── XAuth.java         # 主要实现
+│   │                   ├── XAuthException.java # 异常类
+│   │                   └── XAuthTest.java     # 测试代码
+│   ├── pom.xml
+│   └── README.md     # Java版本说明
+├── csharp/           # C#实现
+│   ├── XAuth/
+│   │   ├── XAuth.cs      # 主要实现
+│   │   ├── Program.cs    # 测试程序
+│   │   └── XAuth.csproj  # 项目文件
+│   └── README.md     # C#版本说明
+└── 易语言/            # 易语言实现
+    ├── XAuth.e       # 主要实现和测试代码
+    └── README.md     # 易语言版本说明
 ```
 
 ## 使用方法
 
-### Python版本
+每种语言实现都有其独立的README.md文件，包含详细的使用说明和示例代码。请参考各语言文件夹中的README.md文件：
 
-```python
-from xauth import XAuth
-
-x = XAuth("your_auth_token")
-
-# OAuth2认证
-params = {
-    "code_challenge": "challenge",
-    "code_challenge_method": "plain",
-    "client_id": "your_client_id",
-    "redirect_uri": "your_redirect_uri",
-    "response_type": "code",
-    "scope": "tweet.read users.read follows.read follows.write offline.access",
-    "state": "your_state"
-}
-auth_code = x.oauth2(params)
-
-# OAuth1认证
-oauth1_verifier = x.oauth1("your_oauth_token")
-```
-
-### JavaScript版本
-
-```javascript
-const XAuth = require('./xauth');
-
-const x = new XAuth('your_auth_token');
-
-// OAuth2认证
-const params = {
-    code_challenge: 'challenge',
-    code_challenge_method: 'plain',
-    client_id: 'your_client_id',
-    redirect_uri: 'your_redirect_uri',
-    response_type: 'code',
-    scope: 'tweet.read users.read follows.read follows.write offline.access',
-    state: 'your_state'
-};
-
-x.oauth2(params)
-    .then(authCode => console.log('OAuth2认证码:', authCode))
-    .catch(error => console.error('错误:', error));
-
-// OAuth1认证
-x.oauth1('your_oauth_token')
-    .then(verifier => console.log('OAuth1验证码:', verifier))
-    .catch(error => console.error('错误:', error));
-```
-
-### Go版本
-
-```go
-x := NewTwitter("your_auth_token")
-
-// OAuth2认证
-params := map[string]string{
-    "code_challenge":        "challenge",
-    "code_challenge_method": "plain",
-    "client_id":            "your_client_id",
-    "redirect_uri":         "your_redirect_uri",
-    "response_type":        "code",
-    "scope":                "tweet.read users.read follows.read follows.write offline.access",
-    "state":                "your_state",
-}
-authCode, err := x.Oauth2(params)
-
-// OAuth1认证
-oauth1Verifier, err := x.Oauth1("your_oauth_token")
-```
-
-### Rust版本
-
-```rust
-use std::collections::HashMap;
-use xauth::XAuth;
-
-// 创建XAuth实例
-let x = XAuth::new("your_auth_token")?;
-
-// OAuth2认证
-let mut params = HashMap::new();
-params.insert("code_challenge".to_string(), "challenge".to_string());
-params.insert("code_challenge_method".to_string(), "plain".to_string());
-params.insert("client_id".to_string(), "your_client_id".to_string());
-params.insert("redirect_uri".to_string(), "your_redirect_uri".to_string());
-params.insert("response_type".to_string(), "code".to_string());
-params.insert("scope".to_string(), "tweet.read users.read follows.read follows.write offline.access".to_string());
-params.insert("state".to_string(), "your_state".to_string());
-
-match x.oauth2(&params).await {
-    Ok(auth_code) => println!("OAuth2 认证码: {}", auth_code),
-    Err(e) => eprintln!("OAuth2 认证错误: {}", e),
-}
-
-// OAuth1认证
-match x.oauth1("your_oauth_token").await {
-    Ok(verifier) => println!("OAuth1 验证码: {}", verifier),
-    Err(e) => eprintln!("OAuth1 认证错误: {}", e),
-}
-```
-
-### PHP版本
-
-```php
-require_once 'XAuth.php';
-
-// 创建XAuth实例
-$x = new XAuth('your_auth_token');
-
-// OAuth2认证
-$params = [
-    'code_challenge' => 'challenge',
-    'code_challenge_method' => 'plain',
-    'client_id' => 'your_client_id',
-    'redirect_uri' => 'your_redirect_uri',
-    'response_type' => 'code',
-    'scope' => 'tweet.read users.read follows.read follows.write offline.access',
-    'state' => 'your_state'
-];
-
-try {
-    $authCode = $x->oauth2($params);
-    echo "OAuth2 认证码: $authCode\n";
-    
-    // OAuth1认证
-    $oauth1Verifier = $x->oauth1('your_oauth_token');
-    echo "OAuth1 验证码: $oauth1Verifier\n";
-} catch (\Exception $e) {
-    echo "错误: " . $e->getMessage() . "\n";
-}
-```
-
-### Java版本
-
-```java
-import com.xauth.XAuth;
-import com.xauth.XAuthException;
-import java.util.HashMap;
-import java.util.Map;
-
-// 创建XAuth实例
-XAuth xAuth = new XAuth("your_auth_token");
-
-try {
-    // OAuth2认证
-    Map<String, String> params = new HashMap<>();
-    params.put("code_challenge", "challenge");
-    params.put("code_challenge_method", "plain");
-    params.put("client_id", "your_client_id");
-    params.put("redirect_uri", "your_redirect_uri");
-    params.put("response_type", "code");
-    params.put("scope", "tweet.read users.read follows.read follows.write offline.access");
-    params.put("state", "your_state");
-    
-    String authCode = xAuth.oauth2(params);
-    System.out.println("OAuth2 认证码: " + authCode);
-    
-    // OAuth1认证
-    String oauth1Verifier = xAuth.oauth1("your_oauth_token");
-    System.out.println("OAuth1 验证码: " + oauth1Verifier);
-    
-} catch (Exception e) {
-    System.err.println("错误: " + e.getMessage());
-} finally {
-    // 关闭HTTP客户端
-    xAuth.close();
-}
-```
-
-## 安装依赖
-
-### Python版本
-```bash
-cd python
-pip install -r requirements.txt
-```
-
-### JavaScript版本
-```bash
-cd javascript
-npm install
-```
-
-### Go版本
-```bash
-cd golang
-go mod download
-```
-
-### Rust版本
-```bash
-cd rust
-cargo build
-```
-
-### PHP版本
-```bash
-# PHP需要安装curl扩展
-php -m | grep curl
-```
-
-### Java版本
-```bash
-cd java
-mvn clean package
-```
+- [Python版本使用说明](python/README.md)
+- [JavaScript版本使用说明](javascript/README.md)
+- [Go版本使用说明](golang/README.md)
+- [Rust版本使用说明](rust/README.md)
+- [PHP版本使用说明](php/README.md)
+- [Java版本使用说明](java/README.md)
+- [C#版本使用说明](csharp/README.md)
+- [易语言版本使用说明](易语言/README.md)
 
 ## 错误处理
 
@@ -290,34 +104,10 @@ mvn clean package
 - Rust: `rust/src/main.rs`
 - PHP: `php/test.php`
 - Java: `java/src/main/java/com/xauth/XAuthTest.java`
+- C#: `csharp/XAuth/Program.cs`
+- 易语言: `易语言/XAuth.e` (包含测试代码)
 
-运行测试：
-
-```bash
-# Python
-cd python
-python test.py
-
-# JavaScript
-cd javascript
-node test.js
-
-# Go
-cd golang
-go run test.go
-
-# Rust
-cd rust
-cargo run
-
-# PHP
-cd php
-php test.php
-
-# Java
-cd java
-mvn exec:java -Dexec.mainClass="com.xauth.XAuthTest"
-```
+运行测试的详细说明请参考各语言文件夹中的README.md文件。
 
 ## 许可证
 
