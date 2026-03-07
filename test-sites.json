@@ -1,0 +1,31 @@
+{
+  "taskon": {
+    "kind": "oauth2",
+    "notes": "真实站点 OAuth2 / PKCE 样本",
+    "params": {
+      "response_type": "code",
+      "client_id": "aTk5eEUxZlpvak1RYU9yTEZhZ0M6MTpjaQ",
+      "redirect_uri": "https://taskon.xyz/twitter",
+      "scope": "tweet.read users.read follows.read like.read offline.access",
+      "code_challenge": "challenge",
+      "code_challenge_method": "plain"
+    }
+  },
+  "galxe": {
+    "kind": "oauth2",
+    "notes": "真实站点 OAuth2 / PKCE 样本",
+    "params": {
+      "response_type": "code",
+      "client_id": "TmNyRlZveUpicFVNM1FxbW9VVjk6MTpjaQ",
+      "redirect_uri": "https://app.galxe.com",
+      "scope": "tweet.read users.read follows.read like.read offline.access",
+      "code_challenge": "challenge",
+      "code_challenge_method": "plain"
+    }
+  },
+  "postwise": {
+    "kind": "oauth1",
+    "notes": "真实站点 OAuth1 样本；先访问 entry_url 提取 oauth_token，再调用 oauth1()",
+    "entry_url": "https://postwise.ai/twitter/authenticate"
+  }
+}
