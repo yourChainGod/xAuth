@@ -29,7 +29,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,7 +40,7 @@ import java.util.regex.Pattern;
  * Twitter OAuth认证工具类
  * 支持OAuth1和OAuth2认证流程
  */
-public class XAuth {
+public class XAuth implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(XAuth.class);
 
     // 常量定义
@@ -58,12 +61,34 @@ public class XAuth {
         ACCOUNT_STATE.put(326, "LOCKED");
     }
 
+    @FunctionalInterface
+    private interface RequestExecutor {
+        CloseableHttpResponse execute() throws IOException;
+    }
+
+    public static class Options {
+        String authenticateUrl = "https://api.x.com/oauth/authenticate";
+        String oauth1AuthorizeUrl = "https://x.com/oauth/authorize";
+        String apiBase = TWITTER_API_BASE;
+        int maxRetries = MAX_RETRIES;
+        int retryIntervalMs = RETRY_INTERVAL;
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(10000)
+                .setSocketTimeout(10000)
+                .build();
+    }
+
     private final String authToken;
     private final CloseableHttpClient client;
     private final CloseableHttpClient client2;
     private final CookieStore cookieStore;
     private final HttpClientContext context;
     private final ObjectMapper objectMapper;
+    private final String authenticateUrl;
+    private final String oauth1AuthorizeUrl;
+    private final String apiBase;
+    private final int maxRetries;
+    private final int retryIntervalMs;
 
     /**
      * 初始化XAuth实例
@@ -72,39 +97,106 @@ public class XAuth {
      * @throws IllegalArgumentException 当auth_token为空时
      */
     public XAuth(String authToken) {
+        this(authToken, new Options());
+    }
+
+    XAuth(String authToken, Options options) {
         if (authToken == null || authToken.isEmpty()) {
             throw new IllegalArgumentException("auth_token不能为空");
+        }
+        if (options == null) {
+            options = new Options();
         }
 
         this.authToken = authToken;
         this.objectMapper = new ObjectMapper();
         this.cookieStore = new BasicCookieStore();
+        this.authenticateUrl = options.authenticateUrl;
+        this.oauth1AuthorizeUrl = options.oauth1AuthorizeUrl;
+        this.apiBase = options.apiBase;
+        this.maxRetries = options.maxRetries;
+        this.retryIntervalMs = options.retryIntervalMs;
 
-        // 设置auth_token cookie
-        BasicClientCookie cookie = new BasicClientCookie("auth_token", authToken);
-        cookie.setDomain(TWITTER_AUTHORITY);
-        cookie.setPath("/");
-        cookieStore.addCookie(cookie);
+        addAuthCookie(TWITTER_AUTHORITY, authToken);
+        addAuthCookie("x.com", authToken);
+        try {
+            URI apiBaseUri = new URI(this.apiBase);
+            addAuthCookie(apiBaseUri.getHost(), authToken);
+        } catch (URISyntaxException ignored) {
+        }
 
         // 创建HTTP上下文
         this.context = HttpClientContext.create();
         context.setCookieStore(cookieStore);
 
         // 创建HTTP客户端
-        RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout(10000)
-                .setSocketTimeout(10000)
-                .build();
-
         this.client = HttpClients.custom()
                 .setDefaultCookieStore(cookieStore)
-                .setDefaultRequestConfig(requestConfig)
+                .setDefaultRequestConfig(options.requestConfig)
                 .build();
 
         this.client2 = HttpClients.custom()
                 .setDefaultCookieStore(cookieStore)
-                .setDefaultRequestConfig(requestConfig)
+                .setDefaultRequestConfig(options.requestConfig)
                 .build();
+    }
+
+    /**
+     * 添加跨域可用的auth_token cookie
+     *
+     * @param domain cookie域名
+     * @param value cookie值
+     */
+    private void addAuthCookie(String domain, String value) {
+        BasicClientCookie cookie = new BasicClientCookie("auth_token", value);
+        cookie.setDomain(domain);
+        cookie.setPath("/");
+        cookieStore.addCookie(cookie);
+    }
+
+    /**
+     * 获取指定cookie值
+     *
+     * @param name cookie名称
+     * @return cookie值，不存在时返回null
+     */
+    private String getCookieValue(String name) {
+        for (Cookie cookie : cookieStore.getCookies()) {
+            if (name.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 带429重试执行请求
+     *
+     * @param executor 请求执行器
+     * @return 最终响应
+     * @throws IOException 当请求失败时
+     * @throws InterruptedException 当线程被中断时
+     * @throws XAuthException 当达到最大重试次数时
+     */
+    private CloseableHttpResponse executeWithRetry(RequestExecutor executor) throws IOException, InterruptedException, XAuthException {
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            CloseableHttpResponse response = executor.execute();
+            if (response.getStatusLine().getStatusCode() != HttpStatus.SC_TOO_MANY_REQUESTS) {
+                return response;
+            }
+
+            EntityUtils.consumeQuietly(response.getEntity());
+            response.close();
+
+            if (attempt == maxRetries) {
+                throw new XAuthException("请求频率限制，重试失败");
+            }
+
+            Thread.sleep(retryIntervalMs);
+        }
+
+        throw new XAuthException("请求频率限制，重试失败");
     }
 
     /**
@@ -122,20 +214,11 @@ public class XAuth {
             request.setHeader("x-twitter-auth-type", "OAuth2Session");
             request.setHeader("x-twitter-active-user", "yes");
             request.setHeader("authorization", AUTHORIZATION);
-        }
-    }
 
-    /**
-     * 处理响应状态
-     *
-     * @param response HTTP响应
-     * @throws IOException 当请求失败时
-     * @throws InterruptedException 当线程被中断时
-     */
-    private void handleResponse(HttpResponse response) throws IOException, InterruptedException {
-        int statusCode = response.getStatusLine().getStatusCode();
-        if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
-            Thread.sleep(RETRY_INTERVAL);
+            String ct0 = getCookieValue("ct0");
+            if (ct0 != null && !ct0.isEmpty()) {
+                request.setHeader("x-csrf-token", ct0);
+            }
         }
     }
 
@@ -155,19 +238,18 @@ public class XAuth {
 
         URI uri;
         try {
-            uri = new URIBuilder("https://api.x.com/oauth/authenticate")
+            uri = new URIBuilder(authenticateUrl)
                     .addParameter("oauth_token", oauthToken)
                     .build();
         } catch (URISyntaxException e) {
             throw new XAuthException("构建URI失败", e);
         }
 
-        HttpGet request = new HttpGet(uri);
-        setHeaders(request, false);
-
-        try (CloseableHttpResponse response = client2.execute(request, context)) {
-            handleResponse(response);
-            
+        try (CloseableHttpResponse response = executeWithRetry(() -> {
+            HttpGet request = new HttpGet(uri);
+            setHeaders(request, false);
+            return client2.execute(request, context);
+        })) {
             HttpEntity entity = response.getEntity();
             String content = EntityUtils.toString(entity, StandardCharsets.UTF_8);
 
@@ -189,7 +271,7 @@ public class XAuth {
                 if (content.contains(marker)) {
                     int startIndex = content.indexOf(marker) + marker.length();
                     int endIndex = content.indexOf("\"", startIndex);
-                    if (startIndex >= 0 && endIndex > startIndex) {
+                    if (endIndex > startIndex) {
                         token = content.substring(startIndex, endIndex);
                         break;
                     }
@@ -216,17 +298,17 @@ public class XAuth {
     public String oauth1(String oauthToken) throws IOException, InterruptedException, XAuthException {
         String authenticityToken = getTwitterToken(oauthToken);
 
-        HttpPost request = new HttpPost("https://x.com/oauth/authorize");
-        setHeaders(request, false);
+        try (CloseableHttpResponse response = executeWithRetry(() -> {
+            HttpPost request = new HttpPost(oauth1AuthorizeUrl);
+            setHeaders(request, false);
 
-        List<NameValuePair> params = new ArrayList<>();
-        params.add(new BasicNameValuePair("authenticity_token", authenticityToken));
-        params.add(new BasicNameValuePair("oauth_token", oauthToken));
-        request.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
+            List<NameValuePair> params = new ArrayList<>();
+            params.add(new BasicNameValuePair("authenticity_token", authenticityToken));
+            params.add(new BasicNameValuePair("oauth_token", oauthToken));
+            request.setEntity(new UrlEncodedFormEntity(params, StandardCharsets.UTF_8));
 
-        try (CloseableHttpResponse response = client2.execute(request, context)) {
-            handleResponse(response);
-            
+            return client2.execute(request, context);
+        })) {
             HttpEntity entity = response.getEntity();
             String content = EntityUtils.toString(entity, StandardCharsets.UTF_8);
 
@@ -245,9 +327,9 @@ public class XAuth {
                     throw new XAuthException("获取到的oauth_verifier为空");
                 }
                 return verifier;
-            } else {
-                throw new XAuthException("未找到oauth_verifier");
             }
+
+            throw new XAuthException("未找到oauth_verifier");
         }
     }
 
@@ -265,10 +347,12 @@ public class XAuth {
             throw new XAuthException("参数不能为空");
         }
 
-        URIBuilder uriBuilder = new URIBuilder();
-        uriBuilder.setScheme("https")
-                .setHost(TWITTER_AUTHORITY)
-                .setPath("/i/api/2/oauth2/authorize");
+        URIBuilder uriBuilder;
+        try {
+            uriBuilder = new URIBuilder(apiBase + "/oauth2/authorize");
+        } catch (URISyntaxException e) {
+            throw new XAuthException("构建URI失败", e);
+        }
 
         for (Map.Entry<String, String> entry : params.entrySet()) {
             uriBuilder.addParameter(entry.getKey(), entry.getValue());
@@ -281,12 +365,11 @@ public class XAuth {
             throw new XAuthException("构建URI失败", e);
         }
 
-        HttpGet request = new HttpGet(uri);
-        setHeaders(request, true);
-
-        try (CloseableHttpResponse response = client.execute(request, context)) {
-            handleResponse(response);
-            
+        try (CloseableHttpResponse response = executeWithRetry(() -> {
+            HttpGet request = new HttpGet(uri);
+            setHeaders(request, true);
+            return client.execute(request, context);
+        })) {
             HttpEntity entity = response.getEntity();
             String content = EntityUtils.toString(entity, StandardCharsets.UTF_8);
 
@@ -299,36 +382,12 @@ public class XAuth {
 
             // 处理CSRF token
             if (data.has("code") && data.get("code").asInt() == 353) {
-                // 获取ct0 cookie
-                Cookie ct0Cookie = null;
-                for (Cookie cookie : cookieStore.getCookies()) {
-                    if ("ct0".equals(cookie.getName())) {
-                        ct0Cookie = cookie;
-                        break;
-                    }
+                String ct0 = getCookieValue("ct0");
+                if (ct0 != null && !ct0.isEmpty()) {
+                    return getAuthCode(params);
                 }
 
-                if (ct0Cookie != null) {
-                    // 重新发起请求，带上CSRF token
-                    HttpGet newRequest = new HttpGet(uri);
-                    setHeaders(newRequest, true);
-                    newRequest.setHeader("x-csrf-token", ct0Cookie.getValue());
-                    
-                    try (CloseableHttpResponse newResponse = client.execute(newRequest, context)) {
-                        handleResponse(newResponse);
-                        
-                        HttpEntity newEntity = newResponse.getEntity();
-                        String newContent = EntityUtils.toString(newEntity, StandardCharsets.UTF_8);
-                        
-                        try {
-                            data = objectMapper.readTree(newContent);
-                        } catch (Exception e) {
-                            throw new XAuthException("响应不是有效的JSON格式", e);
-                        }
-                    }
-                } else {
-                    throw new XAuthException("未找到ct0 cookie");
-                }
+                throw new XAuthException("未找到ct0 cookie");
             }
 
             // 检查错误
@@ -363,25 +422,17 @@ public class XAuth {
     public String oauth2(Map<String, String> params) throws IOException, InterruptedException, XAuthException {
         String authCode = getAuthCode(params);
 
-        HttpPost request = new HttpPost(TWITTER_API_BASE + "/oauth2/authorize");
-        setHeaders(request, true);
-        
-        // 获取ct0 cookie并设置CSRF token
-        for (Cookie cookie : cookieStore.getCookies()) {
-            if ("ct0".equals(cookie.getName())) {
-                request.setHeader("x-csrf-token", cookie.getValue());
-                break;
-            }
-        }
+        try (CloseableHttpResponse response = executeWithRetry(() -> {
+            HttpPost request = new HttpPost(apiBase + "/oauth2/authorize");
+            setHeaders(request, true);
 
-        List<NameValuePair> formParams = new ArrayList<>();
-        formParams.add(new BasicNameValuePair("approval", "true"));
-        formParams.add(new BasicNameValuePair("code", authCode));
-        request.setEntity(new UrlEncodedFormEntity(formParams, StandardCharsets.UTF_8));
+            List<NameValuePair> formParams = new ArrayList<>();
+            formParams.add(new BasicNameValuePair("approval", "true"));
+            formParams.add(new BasicNameValuePair("code", authCode));
+            request.setEntity(new UrlEncodedFormEntity(formParams, StandardCharsets.UTF_8));
 
-        try (CloseableHttpResponse response = client.execute(request, context)) {
-            handleResponse(response);
-            
+            return client.execute(request, context);
+        })) {
             HttpEntity entity = response.getEntity();
             String content = EntityUtils.toString(entity, StandardCharsets.UTF_8);
 
@@ -396,6 +447,7 @@ public class XAuth {
     /**
      * 关闭HTTP客户端
      */
+    @Override
     public void close() {
         try {
             if (client != null) {
@@ -408,4 +460,4 @@ public class XAuth {
             logger.error("关闭HTTP客户端失败", e);
         }
     }
-} 
+}

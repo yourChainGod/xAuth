@@ -1,90 +1,56 @@
-# [hdd.cm推特低至1毛5](https://hdd.cm/)
+# xAuth Python 版本
 
-# XAuth Python版本
+Twitter / X OAuth 示例仓库的 Python 实现，支持 OAuth1 与 OAuth2。
 
-这是Twitter OAuth认证库的Python实现版本，支持OAuth1和OAuth2认证流程。
+## 文件
 
-## 功能特点
+- `xauth.py`：主要实现
+- `test.py`：示例入口（读取环境变量）
+- `requirements.txt`：依赖列表
 
-- 支持OAuth1和OAuth2认证流程
-- 自动处理CSRF token
-- 内置请求重试机制
-- 完善的错误处理
-- 简洁易用的API
+## 依赖
 
-## 文件结构
+- Python 3.8+
+- `requests`
 
-- `xauth.py` - 主要实现文件，包含XAuth类
-- `test.py` - 测试程序
-- `requirements.txt` - 依赖项列表
-
-## 系统要求
-
-- Python 3.6+
-- 依赖包：requests
-
-## 安装依赖
+## 安装
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 使用方法
+## 环境变量
 
-### 初始化
+- `XAUTH_AUTH_TOKEN`（必填）
+- `XAUTH_CLIENT_ID`（必填）
+- `XAUTH_REDIRECT_URI`（必填）
+- `XAUTH_OAUTH1_TOKEN`（可选）
+- `XAUTH_SCOPE` / `XAUTH_STATE` / `XAUTH_CODE_CHALLENGE` / `XAUTH_CODE_CHALLENGE_METHOD`（可选）
 
-```python
-from xauth import XAuth
-
-x = XAuth("your_auth_token")
-```
-
-### OAuth2认证
-
-```python
-# OAuth2认证
-params = {
-    "code_challenge": "challenge",
-    "code_challenge_method": "plain",
-    "client_id": "your_client_id",
-    "redirect_uri": "your_redirect_uri",
-    "response_type": "code",
-    "scope": "tweet.read users.read follows.read follows.write offline.access",
-    "state": "your_state"
-}
-auth_code = x.oauth2(params)
-print(f"OAuth2 认证码: {auth_code}")
-```
-
-### OAuth1认证
-
-```python
-# OAuth1认证
-oauth1_verifier = x.oauth1("your_oauth_token")
-print(f"OAuth1 验证码: {oauth1_verifier}")
-```
-
-## 错误处理
-
-库会抛出异常来表示认证过程中的错误。您可以使用try-except来捕获这些异常：
-
-```python
-try:
-    # 执行认证操作
-    auth_code = x.oauth2(params)
-except Exception as e:
-    print(f"认证失败: {str(e)}")
-```
-
-## 运行测试
+## 运行示例
 
 ```bash
 python test.py
 ```
 
-## 注意事项
+## 本地 mock 回归
 
-1. 确保提供有效的auth_token
-2. 注意API请求限制
-3. 正确处理错误响应
-4. 遵守Twitter API使用条款 
+```bash
+python mock_test.py
+```
+
+## 真实站点 smoke test
+
+```bash
+XAUTH_AUTH_TOKEN=your_token python real_smoke.py
+```
+
+只测单站可追加：
+
+```bash
+XAUTH_AUTH_TOKEN=your_token XAUTH_SITE=taskon python real_smoke.py
+```
+
+## 说明
+
+当前 `test.py` 是示例脚本，不是 pytest 单元测试。若要做可复现验证，建议补 mock 响应测试。

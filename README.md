@@ -1,109 +1,194 @@
-# [hdd.cm推特低至1毛5](https://hdd.cm/)
+# xAuth
 
-# Twitter OAuth认证库
+一个面向 Twitter / X OAuth 场景的多语言示例仓库，提供 Python、JavaScript、Go、Rust、PHP、Java、C# 七种实现。
 
-这是一个用于处理Twitter OAuth认证的多语言实现库，支持OAuth1和OAuth2认证流程。该库提供了Python、JavaScript、Go、Rust、PHP、Java、C#和易语言八种实现版本，可以根据项目需求选择合适的版本。
+## 当前状态
 
-## 功能特点
+- 支持 OAuth1 与 OAuth2 授权流程
+- 各语言目录内提供的是**示例程序 / smoke script**，不是完整自动化测试套件
+- Python / JavaScript / Go / PHP / Java / Rust / C# 均已补本地 **mock 回归入口**；其中 Python / JavaScript / Go 已在当前宿主完成实跑验证，其余四门因缺工具链暂为静态落地
+- 示例已改为通过环境变量读取 token，避免把真实凭据写进仓库
 
-- 支持OAuth1和OAuth2认证流程
-- 自动处理CSRF token
-- 内置请求重试机制
-- 完善的错误处理
-- 多语言支持（Python、JavaScript、Go、Rust、PHP、Java、C#）
+## 目录结构
 
-## 项目结构
-
-```
+```text
 xAuth/
-├── python/           # Python实现
-│   ├── xauth.py      # 主要实现
-│   ├── test.py       # 测试代码
+├── python/
+│   ├── xauth.py
+│   ├── test.py
 │   ├── requirements.txt
-│   └── README.md     # Python版本说明
-├── javascript/       # JavaScript实现
-│   ├── xauth.js      # 主要实现
-│   ├── test.js       # 测试代码
+│   └── README.md
+├── javascript/
+│   ├── xauth.js
+│   ├── test.js
 │   ├── package.json
-│   └── README.md     # JavaScript版本说明
-├── golang/           # Go实现
-│   ├── xauth.go      # 主要实现
-│   ├── test.go       # 测试代码
+│   ├── package-lock.json
+│   └── README.md
+├── golang/
+│   ├── xauth.go
+│   ├── test.go
 │   ├── go.mod
 │   ├── go.sum
-│   └── README.md     # Go版本说明
-├── rust/             # Rust实现
+│   └── README.md
+├── rust/
 │   ├── src/
-│   │   ├── lib.rs    # 主要实现
-│   │   └── main.rs   # 测试代码
+│   │   ├── lib.rs
+│   │   └── main.rs
 │   ├── Cargo.toml
-│   └── README.md     # Rust版本说明
-├── php/              # PHP实现
-│   ├── XAuth.php     # 主要实现
-│   ├── test.php      # 测试代码
-│   └── README.md     # PHP版本说明
-├── java/             # Java实现
-│   ├── src/
-│   │   └── main/
-│   │       └── java/
-│   │           └── com/
-│   │               └── xauth/
-│   │                   ├── XAuth.java         # 主要实现
-│   │                   ├── XAuthException.java # 异常类
-│   │                   └── XAuthTest.java     # 测试代码
+│   └── README.md
+├── php/
+│   ├── XAuth.php
+│   ├── test.php
+│   └── README.md
+├── java/
+│   ├── src/main/java/com/xauth/
+│   │   ├── XAuth.java
+│   │   ├── XAuthException.java
+│   │   └── XAuthTest.java
 │   ├── pom.xml
-│   └── README.md     # Java版本说明
-├── csharp/           # C#实现
-│   ├── XAuth/
-│   │   ├── XAuth.cs      # 主要实现
-│   │   ├── Program.cs    # 测试程序
-│   │   └── XAuth.csproj  # 项目文件
-│   └── README.md     # C#版本说明
-└──
+│   └── README.md
+└── csharp/
+    ├── XAuth.cs
+    ├── Program.cs
+    ├── XAuth.csproj
+    └── README.md
 ```
 
-## 使用方法
+## 示例所需环境变量
 
-每种语言实现都有其独立的README.md文件，包含详细的使用说明和示例代码。请参考各语言文件夹中的README.md文件：
+所有语言示例统一使用以下环境变量：
 
-- [Python版本使用说明](python/README.md)
-- [JavaScript版本使用说明](javascript/README.md)
-- [Go版本使用说明](golang/README.md)
-- [Rust版本使用说明](rust/README.md)
-- [PHP版本使用说明](php/README.md)
-- [Java版本使用说明](java/README.md)
-- [C#版本使用说明](csharp/README.md)
+- `XAUTH_AUTH_TOKEN`：登录后的 auth_token
+- `XAUTH_CLIENT_ID`：OAuth2 client_id
+- `XAUTH_REDIRECT_URI`：OAuth2 redirect_uri
+- `XAUTH_OAUTH1_TOKEN`：可选，OAuth1 request token
+- `XAUTH_SCOPE`：可选，默认 `tweet.read users.read follows.read follows.write offline.access`
+- `XAUTH_STATE`：可选，默认 `demo-state`
+- `XAUTH_CODE_CHALLENGE`：可选，默认 `challenge`
+- `XAUTH_CODE_CHALLENGE_METHOD`：可选，默认 `plain`
 
-## 错误处理
+可复制 `.env.example` 并按需导出环境变量。
 
-库会处理以下常见错误情况：
+真实站点样本配置已统一收口到根目录 `test-sites.json`；测试分层说明见 `TESTING.md`。
 
-- 无效的认证token
-- 请求限制（自动重试）
-- 账户状态问题（封禁、锁定等）
-- CSRF token缺失
-- 网络请求失败
+## 运行示例
 
-## 注意事项
+### Python
 
-1. 确保提供有效的auth_token
-2. 注意API请求限制
-3. 正确处理错误响应
-4. 遵守Twitter API使用条款
+```bash
+cd python
+pip install -r requirements.txt
+python test.py
+```
 
-## 测试
+### JavaScript
 
-每个语言版本都提供了对应的测试文件：
+```bash
+cd javascript
+npm install
+node test.js
+```
 
-- Python: `python/test.py`
-- JavaScript: `javascript/test.js`
-- Go: `golang/test.go`
-- Rust: `rust/src/main.rs`
-- PHP: `php/test.php`
-- Java: `java/src/main/java/com/xauth/XAuthTest.java`
-- C#: `csharp/XAuth/Program.cs`
+### Go
 
-运行测试的详细说明请参考各语言文件夹中的README.md文件。
+```bash
+cd golang
+go run .
+```
+
+### Rust
+
+```bash
+cd rust
+cargo run
+```
+
+### PHP
+
+```bash
+cd php
+php test.php
+```
+
+### Java
+
+```bash
+cd java
+mvn package
+java -cp target/xauth-1.0-SNAPSHOT-jar-with-dependencies.jar com.xauth.XAuthTest
+```
+
+### C#
+
+```bash
+cd csharp
+dotnet run
+```
+
+## 本地 mock 回归
+
+### Python
+
+```bash
+cd python
+python mock_test.py
+```
+
+### JavaScript
+
+```bash
+cd javascript
+npm run test:mock
+```
+
+### Go
+
+```bash
+cd golang
+go test ./...
+```
+
+### PHP
+
+```bash
+cd php
+php mock_test.php
+```
+
+### Java
+
+```bash
+cd java
+mvn test
+```
+
+### Rust
+
+```bash
+cd rust
+cargo test
+```
+
+### C#
+
+```bash
+cd csharp/XAuth.Tests
+dotnet test
+```
+
+## CI
+
+仓库已提供 GitHub Actions CI，当前覆盖：Python、JavaScript、Go、PHP、Java、Rust、C#。
+其中 PHP / Java / Rust / C# 主要依赖 CI 进行真实工具链验证。
+
+## 已知问题 / 建议
+
+1. 当前仓库主要是多语言实现与示例集合，缺少 mock-based 自动化测试。
+2. 若要用于生产环境，建议补充：
+   - 统一测试夹具与伪造响应
+   - CI 构建矩阵
+   - 依赖版本锁定与安全扫描
+   - 更明确的错误码与返回值约定
 
 ## 许可证
 

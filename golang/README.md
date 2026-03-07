@@ -1,28 +1,30 @@
-# [hdd.cm推特低至1毛5](https://hdd.cm/)
+# xAuth Go 版本
 
-# XAuth Go版本
-
-这是Twitter OAuth认证库的Go实现版本，支持OAuth1和OAuth2认证流程。
-
-## 功能特点
-
-- 支持OAuth1和OAuth2认证流程
-- 自动处理CSRF token
-- 内置请求重试机制
-- 完善的错误处理
-- 符合Go语言习惯的API设计
+这是 Twitter / X OAuth 示例仓库的 Go 实现，支持 OAuth1 与 OAuth2 流程。
 
 ## 文件结构
 
-- `xauth.go` - 主要实现文件
-- `test.go` - 测试程序
-- `go.mod` - Go模块定义
-- `go.sum` - 依赖版本锁定文件
+- `xauth.go`：主要实现
+- `test.go`：示例入口（读取环境变量）
+- `go.mod` / `go.sum`：Go 模块与依赖锁定
 
 ## 系统要求
 
-- Go 1.13+
-- 依赖包：net/http, encoding/json等标准库
+- Go 1.23+
+- 外部依赖：
+  - `github.com/go-resty/resty/v2`
+  - `github.com/tidwall/gjson`
+
+## 环境变量
+
+- `XAUTH_AUTH_TOKEN`（必填）
+- `XAUTH_CLIENT_ID`（必填）
+- `XAUTH_REDIRECT_URI`（必填）
+- `XAUTH_OAUTH1_TOKEN`（可选）
+- `XAUTH_SCOPE`（可选）
+- `XAUTH_STATE`（可选）
+- `XAUTH_CODE_CHALLENGE`（可选）
+- `XAUTH_CODE_CHALLENGE_METHOD`（可选）
 
 ## 安装依赖
 
@@ -30,77 +32,40 @@
 go mod download
 ```
 
-## 使用方法
+## 运行示例
 
-### 初始化
-
-```go
-import (
-    "fmt"
-    "log"
-)
-
-// 创建XAuth实例
-x := NewTwitter("your_auth_token")
+```bash
+go run .
 ```
 
-### OAuth2认证
+## 本地 mock 回归
+
+```bash
+go test ./...
+```
+
+## 使用示例
 
 ```go
-// OAuth2认证
+x := NewTwitter(os.Getenv("XAUTH_AUTH_TOKEN"))
 params := map[string]string{
     "code_challenge":        "challenge",
     "code_challenge_method": "plain",
-    "client_id":            "your_client_id",
-    "redirect_uri":         "your_redirect_uri",
-    "response_type":        "code",
-    "scope":                "tweet.read users.read follows.read follows.write offline.access",
-    "state":                "your_state",
+    "client_id":             os.Getenv("XAUTH_CLIENT_ID"),
+    "redirect_uri":          os.Getenv("XAUTH_REDIRECT_URI"),
+    "response_type":         "code",
+    "scope":                 "tweet.read users.read follows.read follows.write offline.access",
+    "state":                 "demo-state",
 }
 
 authCode, err := x.Oauth2(params)
 if err != nil {
-    log.Fatalf("OAuth2认证失败: %v", err)
+    log.Fatal(err)
 }
-fmt.Printf("OAuth2认证码: %s\n", authCode)
+fmt.Println(authCode)
 ```
 
-### OAuth1认证
+## 说明
 
-```go
-// OAuth1认证
-oauth1Verifier, err := x.Oauth1("your_oauth_token")
-if err != nil {
-    log.Fatalf("OAuth1认证失败: %v", err)
-}
-fmt.Printf("OAuth1验证码: %s\n", oauth1Verifier)
-```
-
-## 错误处理
-
-库使用Go的标准错误处理方式，返回错误作为第二个返回值：
-
-```go
-authCode, err := x.Oauth2(params)
-if err != nil {
-    // 处理错误
-    log.Printf("认证失败: %v", err)
-    return
-}
-
-// 使用authCode
-fmt.Printf("认证成功，认证码: %s\n", authCode)
-```
-
-## 运行测试
-
-```bash
-go run test.go
-```
-
-## 注意事项
-
-1. 确保提供有效的auth_token
-2. 注意API请求限制
-3. 正确处理错误响应
-4. 遵守Twitter API使用条款 
+- 当前 `test.go` 是示例程序，不是 `go test` 风格的单元测试。
+- 若要补自动化测试，建议新增 `*_test.go` 文件并配合 mock server 验证 OAuth 响应分支。

@@ -6,62 +6,58 @@ namespace XAuth
 {
     class Program
     {
+        static string MustEnv(string key)
+        {
+            var value = Environment.GetEnvironmentVariable(key);
+            if (string.IsNullOrEmpty(value))
+            {
+                throw new InvalidOperationException($"请先设置 {key} 环境变量");
+            }
+            return value;
+        }
+
+        static string EnvOr(string key, string fallback)
+        {
+            var value = Environment.GetEnvironmentVariable(key);
+            return string.IsNullOrEmpty(value) ? fallback : value;
+        }
+
         static async Task Main(string[] args)
         {
-            Console.WriteLine("Twitter OAuth认证测试");
-            Console.WriteLine("=====================");
-
             try
             {
-                // 创建XAuth实例
-                using var xAuth = new XAuthClient("5a0be24d859ad6820906bbc28b0ac9219a71489b");
+                using var xAuth = new XAuthClient(MustEnv("XAUTH_AUTH_TOKEN"));
 
-                // OAuth2认证测试
-                Console.WriteLine("\n执行OAuth2认证测试...");
                 var parameters = new Dictionary<string, string>
                 {
-                    { "code_challenge", "challenge" },
-                    { "code_challenge_method", "plain" },
-                    { "client_id", "MjdoOFVuNlJwRmxQT1VnWVBiUkw6MTpjaQ" },
-                    { "redirect_uri", "https://dapp.uxlink.io/authGateway" },
+                    { "code_challenge", EnvOr("XAUTH_CODE_CHALLENGE", "challenge") },
+                    { "code_challenge_method", EnvOr("XAUTH_CODE_CHALLENGE_METHOD", "plain") },
+                    { "client_id", MustEnv("XAUTH_CLIENT_ID") },
+                    { "redirect_uri", MustEnv("XAUTH_REDIRECT_URI") },
                     { "response_type", "code" },
-                    { "scope", "tweet.read users.read follows.read follows.write offline.access" },
-                    { "state", "1867096870644760576" }
+                    { "scope", EnvOr("XAUTH_SCOPE", "tweet.read users.read follows.read follows.write offline.access") },
+                    { "state", EnvOr("XAUTH_STATE", "demo-state") }
                 };
 
-                try
-                {
-                    string authCode = await xAuth.OAuth2Async(parameters);
-                    Console.WriteLine($"OAuth2认证成功，认证码: {authCode}");
-                }
-                catch (XAuthException ex)
-                {
-                    Console.WriteLine($"OAuth2认证失败: {ex.Message}");
-                }
+                string authCode = await xAuth.OAuth2Async(parameters);
+                Console.WriteLine($"OAuth2 认证码: {authCode}");
 
-                // OAuth1认证测试
-                Console.WriteLine("\n执行OAuth1认证测试...");
-                try
+                var oauth1Token = Environment.GetEnvironmentVariable("XAUTH_OAUTH1_TOKEN");
+                if (!string.IsNullOrEmpty(oauth1Token))
                 {
-                    string oauth1Verifier = await xAuth.OAuth1Async("lSgWPQAAAAABuWQYAAABk7sKZI0");
-                    Console.WriteLine($"OAuth1认证成功，验证码: {oauth1Verifier}");
+                    string oauth1Verifier = await xAuth.OAuth1Async(oauth1Token);
+                    Console.WriteLine($"OAuth1 验证码: {oauth1Verifier}");
                 }
-                catch (XAuthException ex)
+                else
                 {
-                    Console.WriteLine($"OAuth1认证失败: {ex.Message}");
+                    Console.WriteLine("未设置 XAUTH_OAUTH1_TOKEN，跳过 OAuth1 示例");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"发生错误: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"内部错误: {ex.InnerException.Message}");
-                }
+                Console.WriteLine($"错误: {ex.Message}");
+                Environment.ExitCode = 1;
             }
-
-            Console.WriteLine("\n测试完成，按任意键退出...");
-            Console.ReadKey();
         }
     }
-} 
+}
