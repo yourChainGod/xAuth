@@ -28,8 +28,12 @@ class XAuth {
         if (!authToken) {
             throw new Error('authToken不能为空');
         }
-        
+
         this.authToken = authToken;
+        this.cookies = {
+            auth_token: authToken
+        };
+        this.csrfToken = null;
         this.client = this._createAxiosInstance(true);
         this.client2 = this._createAxiosInstance(false);
     }
@@ -37,13 +41,12 @@ class XAuth {
     /**
      * 创建配置好的Axios实例
      * @param {boolean} includeTwitterHeaders - 是否包含Twitter特定的headers
-     * @returns {import('axios').AxiosInstance} - 配置好的Axios实例
+     * @returns {import('axios').AxiosInstance}
      * @private
      */
     _createAxiosInstance(includeTwitterHeaders = true) {
         const headers = {
-            'user-agent': XAuth.USER_AGENT,
-            'Cookie': `auth_token=${this.authToken}`
+            'user-agent': XAuth.USER_AGENT
         };
 
         if (includeTwitterHeaders) {
@@ -56,46 +59,152 @@ class XAuth {
             });
         }
 
-        return axios.create({
+        const client = axios.create({
             headers,
             timeout: 10000,
-            validateStatus: null
+            maxRedirects: 5,
+            validateStatus: () => true
         });
+
+        client.interceptors.request.use((config) => {
+            config.headers = config.headers || {};
+            config.headers.Cookie = this._getCookieHeader();
+
+            if (includeTwitterHeaders && this.csrfToken) {
+                config.headers['x-csrf-token'] = this.csrfToken;
+            }
+
+            return config;
+        });
+
+        client.interceptors.response.use((response) => {
+            this._updateCookies(response.headers?.['set-cookie']);
+
+            if (this.cookies.ct0) {
+                this.csrfToken = this.cookies.ct0;
+            }
+
+            return response;
+        });
+
+        return client;
     }
 
     /**
-     * 处理响应状态
-     * @param {import('axios').AxiosResponse} response - HTTP响应对象
-     * @param {Function} retryFunc - 重试函数
-     * @returns {Promise<any>} - 如果需要重试，返回重试函数的结果
+     * 获取当前Cookie头
+     * @returns {string}
      * @private
      */
-    async _handleResponse(response, retryFunc) {
-        if (response.status === 429) {
-            await new Promise(resolve => setTimeout(resolve, XAuth.RETRY_INTERVAL));
-            if (retryFunc) {
-                return await retryFunc();
+    _getCookieHeader() {
+        return Object.entries(this.cookies)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => `${key}=${value}`)
+            .join('; ');
+    }
+
+    /**
+     * 更新响应中的Cookie
+     * @param {string[]|string|undefined} setCookieHeaders
+     * @private
+     */
+    _updateCookies(setCookieHeaders) {
+        const cookieList = Array.isArray(setCookieHeaders)
+            ? setCookieHeaders
+            : setCookieHeaders
+                ? [setCookieHeaders]
+                : [];
+
+        for (const header of cookieList) {
+            const cookiePair = String(header).split(';')[0];
+            const [name, ...rest] = cookiePair.split('=');
+            if (!name || rest.length === 0) {
+                continue;
             }
-            throw new Error('请求频率限制，重试失败');
+
+            this.cookies[name.trim()] = rest.join('=').trim();
         }
+    }
+
+    /**
+     * 带429重试的请求执行器
+     * @param {() => Promise<import('axios').AxiosResponse>} requestFn
+     * @returns {Promise<import('axios').AxiosResponse>}
+     * @private
+     */
+    async _requestWithRetry(requestFn) {
+        for (let attempt = 0; attempt <= XAuth.MAX_RETRIES; attempt++) {
+            const response = await requestFn();
+            if (response.status !== 429) {
+                return response;
+            }
+
+            if (attempt === XAuth.MAX_RETRIES) {
+                break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, XAuth.RETRY_INTERVAL));
+        }
+
+        throw new Error('请求频率限制，重试失败');
+    }
+
+    /**
+     * 将响应体安全转换为文本
+     * @param {any} data
+     * @returns {string}
+     * @private
+     */
+    _extractText(data) {
+        if (typeof data === 'string') {
+            return data;
+        }
+
+        if (Buffer.isBuffer(data)) {
+            return data.toString('utf8');
+        }
+
+        if (data === null || data === undefined) {
+            return '';
+        }
+
+        return JSON.stringify(data);
+    }
+
+    /**
+     * 判断响应中是否包含redirect_uri
+     * @param {any} data
+     * @returns {boolean}
+     * @private
+     */
+    _hasRedirectUri(data) {
+        if (typeof data === 'string') {
+            return data.includes('redirect_uri');
+        }
+
+        return Boolean(
+            data &&
+            typeof data === 'object' &&
+            !Array.isArray(data) &&
+            (Object.prototype.hasOwnProperty.call(data, 'redirect_uri') ||
+             Object.prototype.hasOwnProperty.call(data, 'redirectUri'))
+        );
     }
 
     /**
      * 获取Twitter认证token
      * @param {string} oauthToken - OAuth token
-     * @returns {Promise<string>} - 认证token字符串
+     * @returns {Promise<string>}
      */
     async getTwitterToken(oauthToken) {
         if (!oauthToken) {
             throw new Error('oauth_token不能为空');
         }
 
-        const response = await this.client2.get('https://api.x.com/oauth/authenticate', {
+        const response = await this._requestWithRetry(() => this.client2.get('https://api.x.com/oauth/authenticate', {
             params: { oauth_token: oauthToken }
-        });
+        }));
 
-        await this._handleResponse(response);
-        const content = response.data;
+        const content = this._extractText(response.data);
 
         if (!content.includes('authenticity_token')) {
             if (content.includes('The request token for this page is invalid')) {
@@ -127,7 +236,7 @@ class XAuth {
     /**
      * 执行OAuth1认证流程
      * @param {string} oauthToken - OAuth token
-     * @returns {Promise<string>} - OAuth验证码
+     * @returns {Promise<string>}
      */
     async oauth1(oauthToken) {
         const authenticityToken = await this.getTwitterToken(oauthToken);
@@ -137,10 +246,17 @@ class XAuth {
             oauth_token: oauthToken
         });
 
-        const response = await this.client2.post('https://x.com/oauth/authorize', data);
-        await this._handleResponse(response);
+        const response = await this._requestWithRetry(() => this.client2.post(
+            'https://x.com/oauth/authorize',
+            data,
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            }
+        ));
 
-        const content = response.data;
+        const content = this._extractText(response.data);
 
         if (!content.includes('oauth_verifier')) {
             if (content.includes('This account is suspended.')) {
@@ -160,60 +276,30 @@ class XAuth {
     /**
      * 获取认证码
      * @param {Object} params - 请求参数
-     * @returns {Promise<string>} - 认证码
+     * @returns {Promise<string>}
      */
     async getAuthCode(params) {
         if (!params || Object.keys(params).length === 0) {
             throw new Error('参数不能为空');
         }
 
-        const response = await this.client.get(`${XAuth.TWITTER_API_BASE}/oauth2/authorize`, {
-            params,
-            headers: this.client.defaults.headers
-        });
+        const response = await this._requestWithRetry(() => this.client.get(`${XAuth.TWITTER_API_BASE}/oauth2/authorize`, {
+            params
+        }));
 
-        await this._handleResponse(response, () => this.getAuthCode(params));
-
-        if (!response.data || typeof response.data !== 'object') {
+        const data = response.data;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
             throw new Error('响应格式错误');
         }
 
-        const data = response.data;
-
-        // 处理CSRF token
         if (data.code === 353) {
-            const ct0Cookie = response.headers['set-cookie']?.find(cookie => cookie.startsWith('ct0='));
-            if (ct0Cookie) {
-                const ct0 = ct0Cookie.split(';')[0].split('=')[1];
-                
-                // 创建一个新的客户端实例，确保包含新的CSRF token
-                const newClient = axios.create({
-                    headers: {
-                        ...this.client.defaults.headers,
-                        'x-csrf-token': ct0
-                    },
-                    timeout: 10000,
-                    validateStatus: null
-                });
-                
-                // 临时保存原始客户端
-                const originalClient = this.client;
-                
-                try {
-                    // 使用新客户端
-                    this.client = newClient;
-                    // 递归调用
-                    return await this.getAuthCode(params);
-                } finally {
-                    // 恢复原始客户端，但更新CSRF token
-                    this.client = originalClient;
-                    this.client.defaults.headers['x-csrf-token'] = ct0;
-                }
+            if (this.cookies.ct0) {
+                this.csrfToken = this.cookies.ct0;
+                return await this.getAuthCode(params);
             }
             throw new Error('未找到ct0 cookie');
         }
 
-        // 检查错误
         if (data.errors && data.errors.length > 0) {
             const errorCode = data.errors[0].code;
             if (XAuth.ACCOUNT_STATE[errorCode]) {
@@ -231,7 +317,7 @@ class XAuth {
     /**
      * 执行OAuth2认证流程
      * @param {Object} params - 请求参数
-     * @returns {Promise<string>} - 认证码
+     * @returns {Promise<string>}
      */
     async oauth2(params) {
         const authCode = await this.getAuthCode(params);
@@ -241,23 +327,18 @@ class XAuth {
             code: authCode
         });
 
-        const response = await this.client.post(
+        const response = await this._requestWithRetry(() => this.client.post(
             `${XAuth.TWITTER_API_BASE}/oauth2/authorize`,
             data,
             {
                 headers: {
-                    ...this.client.defaults.headers,
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json, text/plain, */*'
-                },
-                maxRedirects: 5,
-                validateStatus: null
+                }
             }
-        );
+        ));
 
-        await this._handleResponse(response, () => this.oauth2(params));
-
-        if (!response.data.includes('redirect_uri')) {
+        if (!this._hasRedirectUri(response.data)) {
             throw new Error('响应中未找到redirect_uri');
         }
 

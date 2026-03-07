@@ -28,7 +28,7 @@ class XAuth {
 
     /**
      * 初始化XAuth实例
-     * 
+     *
      * @param string $authToken Twitter认证token
      * @throws \InvalidArgumentException 当auth_token为空时
      */
@@ -39,12 +39,12 @@ class XAuth {
 
         $this->authToken = $authToken;
         $this->cookies = ['auth_token' => $authToken];
-        
+
         // 设置基础headers
         $this->headers = [
             'User-Agent' => self::USER_AGENT
         ];
-        
+
         // 设置Twitter特定headers
         $this->twitterHeaders = array_merge($this->headers, [
             'Authority' => self::TWITTER_AUTHORITY,
@@ -57,66 +57,127 @@ class XAuth {
 
     /**
      * 发送HTTP请求
-     * 
+     *
      * @param string $method 请求方法
      * @param string $url 请求URL
      * @param array $options 请求选项
      * @param bool $includeTwitterHeaders 是否包含Twitter特定headers
+     * @param int $attempt 当前重试次数
      * @return array 响应数据
      * @throws \RuntimeException 当请求失败时
      */
-    private function request(string $method, string $url, array $options = [], bool $includeTwitterHeaders = true): array {
+    protected function request(string $method, string $url, array $options = [], bool $includeTwitterHeaders = true, int $attempt = 0): array {
         $headers = $includeTwitterHeaders ? $this->twitterHeaders : $this->headers;
-        
+
+        if ($includeTwitterHeaders && !empty($this->cookies['ct0'])) {
+            $headers['X-CSRF-Token'] = $this->cookies['ct0'];
+        }
+
+        if ($method === 'POST' && !empty($options['data']) && !isset($headers['Content-Type'])) {
+            $headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+
+        $responseHeaders = [];
+        $error = '';
+
+        $requestUrl = $url;
+
         $curlOptions = [
-            CURLOPT_URL => $url,
+            CURLOPT_URL => $requestUrl,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_TIMEOUT => 10,
             CURLOPT_HTTPHEADER => $this->formatHeaders($headers),
-            CURLOPT_COOKIE => $this->formatCookies($this->cookies)
+            CURLOPT_COOKIE => $this->formatCookies($this->cookies),
+            CURLOPT_HEADERFUNCTION => function ($curl, $headerLine) use (&$responseHeaders) {
+                $trimmed = trim($headerLine);
+                if ($trimmed !== '') {
+                    $responseHeaders[] = $trimmed;
+                }
+
+                if (stripos($headerLine, 'Set-Cookie:') === 0) {
+                    $this->storeCookie(substr($headerLine, strlen('Set-Cookie:')));
+                }
+
+                return strlen($headerLine);
+            }
         ];
-        
+
         if ($method === 'POST') {
             $curlOptions[CURLOPT_POST] = true;
-            
+
             if (!empty($options['data'])) {
                 $curlOptions[CURLOPT_POSTFIELDS] = $options['data'];
             }
         } elseif (!empty($options['params'])) {
-            $url .= '?' . http_build_query($options['params']);
-            $curlOptions[CURLOPT_URL] = $url;
+            $requestUrl .= '?' . http_build_query($options['params']);
+            $curlOptions[CURLOPT_URL] = $requestUrl;
         }
-        
+
         $curl = curl_init();
         curl_setopt_array($curl, $curlOptions);
-        
+
         $response = curl_exec($curl);
         $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        $headerSize = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
-        $error = curl_error($curl);
-        
+        if ($response === false) {
+            $error = curl_error($curl);
+        }
+
         curl_close($curl);
-        
+
         if ($response === false) {
             throw new \RuntimeException('请求失败: ' . $error);
         }
-        
-        // 处理请求限制
+
         if ($httpCode === 429) {
+            if ($attempt >= self::MAX_RETRIES) {
+                throw new \RuntimeException('请求频率限制，重试失败');
+            }
+
             sleep(self::RETRY_INTERVAL);
-            return $this->request($method, $url, $options, $includeTwitterHeaders);
+            return $this->request($method, $url, $options, $includeTwitterHeaders, $attempt + 1);
         }
-        
+
         return [
             'status' => $httpCode,
-            'body' => $response
+            'body' => $response,
+            'headers' => $responseHeaders
         ];
     }
 
     /**
+     * 保存响应中的Cookie
+     *
+     * @param string $cookieHeader Set-Cookie头值
+     * @return void
+     */
+    private function storeCookie(string $cookieHeader): void {
+        $cookieHeader = trim($cookieHeader);
+        if ($cookieHeader === '') {
+            return;
+        }
+
+        $cookiePair = explode(';', $cookieHeader, 2)[0] ?? '';
+        $parts = explode('=', $cookiePair, 2);
+        if (count($parts) !== 2) {
+            return;
+        }
+
+        $name = trim($parts[0]);
+        $value = trim($parts[1]);
+        if ($name === '') {
+            return;
+        }
+
+        $this->cookies[$name] = $value;
+        if ($name === 'ct0' && $value !== '') {
+            $this->twitterHeaders['X-CSRF-Token'] = $value;
+        }
+    }
+
+    /**
      * 格式化请求头
-     * 
+     *
      * @param array $headers 请求头数组
      * @return array 格式化后的请求头
      */
@@ -130,7 +191,7 @@ class XAuth {
 
     /**
      * 格式化Cookie
-     * 
+     *
      * @param array $cookies Cookie数组
      * @return string 格式化后的Cookie字符串
      */
@@ -144,7 +205,7 @@ class XAuth {
 
     /**
      * 获取Twitter认证token
-     * 
+     *
      * @param string $oauthToken OAuth token
      * @return string 认证token字符串
      * @throws \InvalidArgumentException 当token无效或响应格式不正确时
@@ -157,9 +218,9 @@ class XAuth {
         $response = $this->request('GET', 'https://api.x.com/oauth/authenticate', [
             'params' => ['oauth_token' => $oauthToken]
         ], false);
-        
+
         $content = $response['body'];
-        
+
         if (strpos($content, 'authenticity_token') === false) {
             if (strpos($content, 'The request token for this page is invalid') !== false) {
                 throw new \InvalidArgumentException('请求oauth_token无效');
@@ -172,64 +233,68 @@ class XAuth {
             'name="authenticity_token" value="',
             'name="authenticity_token" type="hidden" value="'
         ];
-        
+
         $token = null;
         foreach ($tokenMarkers as $marker) {
             if (strpos($content, $marker) !== false) {
-                $parts = explode($marker, $content);
-                $token = explode('"', $parts[1])[0];
+                $parts = explode($marker, $content, 2);
+                $token = explode('"', $parts[1], 2)[0];
                 break;
             }
         }
-                
+
         if (empty($token)) {
             throw new \InvalidArgumentException('获取到的authenticity_token为空');
         }
-        
+
         return $token;
     }
 
     /**
      * 执行OAuth1认证流程
-     * 
+     *
      * @param string $oauthToken OAuth token
      * @return string OAuth验证码
      * @throws \InvalidArgumentException 当认证失败时
      */
     public function oauth1(string $oauthToken): string {
         $authenticityToken = $this->getTwitterToken($oauthToken);
-        
+
         $data = http_build_query([
             'authenticity_token' => $authenticityToken,
             'oauth_token' => $oauthToken
         ]);
-        
+
         $response = $this->request('POST', 'https://x.com/oauth/authorize', [
             'data' => $data
         ], false);
-        
+
         $content = $response['body'];
-        
+
         if (strpos($content, 'oauth_verifier') === false) {
             if (strpos($content, 'This account is suspended.') !== false) {
                 throw new \InvalidArgumentException('该账户已被封禁');
             }
             throw new \InvalidArgumentException('未找到oauth_verifier');
         }
-        
-        $parts = explode('oauth_verifier=', $content);
-        $verifier = explode('"', $parts[1])[0];
-        
+
+        $parts = explode('oauth_verifier=', $content, 2);
+        if (count($parts) < 2) {
+            throw new \InvalidArgumentException('未找到oauth_verifier');
+        }
+
+        $verifier = explode('"', $parts[1], 2)[0];
+
         if (empty($verifier)) {
             throw new \InvalidArgumentException('获取到的oauth_verifier为空');
         }
-        
+
         return $verifier;
     }
 
     /**
      * 获取认证码
-     * 
+     *
      * @param array $params 请求参数
      * @return string 认证码
      * @throws \InvalidArgumentException 当参数无效或响应格式不正确时
@@ -241,18 +306,16 @@ class XAuth {
 
         $url = self::TWITTER_API_BASE . '/oauth2/authorize';
         $response = $this->request('GET', $url, ['params' => $params]);
-        
+
         $data = json_decode($response['body'], true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             throw new \InvalidArgumentException('响应不是有效的JSON格式');
         }
-        
+
         // 处理CSRF token
         if (isset($data['code']) && $data['code'] === 353) {
-            // 获取ct0 cookie
-            preg_match('/ct0=([^;]+)/', $response['headers'] ?? '', $matches);
-            if (!empty($matches[1])) {
-                $this->twitterHeaders['X-CSRF-Token'] = $matches[1];
+            if (!empty($this->cookies['ct0'])) {
+                $this->twitterHeaders['X-CSRF-Token'] = $this->cookies['ct0'];
                 return $this->getAuthCode($params);
             }
             throw new \InvalidArgumentException('未找到ct0 cookie');
@@ -269,32 +332,36 @@ class XAuth {
         if (empty($data['auth_code'])) {
             throw new \InvalidArgumentException('响应中未找到auth_code');
         }
-        
+
         return $data['auth_code'];
     }
 
     /**
      * 执行OAuth2认证流程
-     * 
+     *
      * @param array $params 请求参数
      * @return string 认证码
      * @throws \InvalidArgumentException 当认证失败时
      */
     public function oauth2(array $params): string {
         $authCode = $this->getAuthCode($params);
-        
+
+        if (!empty($this->cookies['ct0'])) {
+            $this->twitterHeaders['X-CSRF-Token'] = $this->cookies['ct0'];
+        }
+
         $data = http_build_query([
             'approval' => 'true',
             'code' => $authCode
         ]);
-        
+
         $url = self::TWITTER_API_BASE . '/oauth2/authorize';
         $response = $this->request('POST', $url, ['data' => $data]);
-        
+
         if (strpos($response['body'], 'redirect_uri') === false) {
             throw new \InvalidArgumentException('响应中未找到redirect_uri');
         }
-        
+
         return $authCode;
     }
-} 
+}

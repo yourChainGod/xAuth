@@ -4,42 +4,55 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Twitter OAuth认证测试
+ * Twitter OAuth 示例入口
  */
 public class XAuthTest {
-    
+    private static String mustEnv(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException("请先设置 " + key + " 环境变量");
+        }
+        return value;
+    }
+
+    private static String envOr(String key, String fallback) {
+        String value = System.getenv(key);
+        return (value == null || value.isEmpty()) ? fallback : value;
+    }
+
     public static void main(String[] args) {
         XAuth xAuth = null;
-        
+
         try {
-            // 创建XAuth实例
-            xAuth = new XAuth("5a0be24d859ad6820906bbc28b0ac9219a71489b");
-            
-            // OAuth2认证测试
+            xAuth = new XAuth(mustEnv("XAUTH_AUTH_TOKEN"));
+
             Map<String, String> params = new HashMap<>();
-            params.put("code_challenge", "challenge");
-            params.put("code_challenge_method", "plain");
-            params.put("client_id", "MjdoOFVuNlJwRmxQT1VnWVBiUkw6MTpjaQ");
-            params.put("redirect_uri", "https://dapp.uxlink.io/authGateway");
+            params.put("code_challenge", envOr("XAUTH_CODE_CHALLENGE", "challenge"));
+            params.put("code_challenge_method", envOr("XAUTH_CODE_CHALLENGE_METHOD", "plain"));
+            params.put("client_id", mustEnv("XAUTH_CLIENT_ID"));
+            params.put("redirect_uri", mustEnv("XAUTH_REDIRECT_URI"));
             params.put("response_type", "code");
-            params.put("scope", "tweet.read users.read follows.read follows.write offline.access");
-            params.put("state", "1867096870644760576");
-            
+            params.put("scope", envOr("XAUTH_SCOPE", "tweet.read users.read follows.read follows.write offline.access"));
+            params.put("state", envOr("XAUTH_STATE", "demo-state"));
+
             String authCode = xAuth.oauth2(params);
             System.out.println("OAuth2 认证码: " + authCode);
-            
-            // OAuth1认证测试
-            String oauth1Verifier = xAuth.oauth1("lSgWPQAAAAABuWQYAAABk7sKZI0");
-            System.out.println("OAuth1 验证码: " + oauth1Verifier);
-            
+
+            String oauth1Token = System.getenv("XAUTH_OAUTH1_TOKEN");
+            if (oauth1Token != null && !oauth1Token.isEmpty()) {
+                String oauth1Verifier = xAuth.oauth1(oauth1Token);
+                System.out.println("OAuth1 验证码: " + oauth1Verifier);
+            } else {
+                System.out.println("未设置 XAUTH_OAUTH1_TOKEN，跳过 OAuth1 示例");
+            }
         } catch (Exception e) {
             System.err.println("错误: " + e.getMessage());
             e.printStackTrace();
+            System.exit(1);
         } finally {
-            // 关闭HTTP客户端
             if (xAuth != null) {
                 xAuth.close();
             }
         }
     }
-} 
+}
